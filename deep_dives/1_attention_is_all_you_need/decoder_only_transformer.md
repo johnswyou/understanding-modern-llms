@@ -51,33 +51,11 @@ Predicting every position in one pass creates one requirement. The input at posi
 | $N$ | number of decoder blocks | 6 | 2 |
 | $p_{drop}$ | dropout rate | 0.1 | 0.1 |
 
-The whole model, with the shape of the data at each step:
+![The decoder-only Transformer](figures/architecture.png)
 
-```
-token ids                                                   (B, n)           integers in [0, n_vocab)
-   │  take row t of E for each id t, multiply by √d_model   E: (n_vocab, d_model)
-   ▼
-token vectors                                               (B, n, d_model)
-   │  add positional encoding PE[:n]                        PE: (n_ctx, d_model), fixed
-   ▼
-x                                                           (B, n, d_model)
-   │
-┌──┴─────────────── decoder block, repeated N times ────────────────────────┐
-│  x = LayerNorm(x + MaskedMultiHeadAttention(x))           (B, n, d_model) │
-│  x = LayerNorm(x + FFN(x))                                (B, n, d_model) │
-└──┬────────────────────────────────────────────────────────────────────────┘
-   ▼
-x                                                           (B, n, d_model)
-   │  multiply by Eᵀ (the same E as at the input)           Eᵀ: (d_model, n_vocab)
-   ▼
-logits                                                      (B, n, n_vocab)
-   │  softmax over the last axis
-   ▼
-probabilities                                               (B, n, n_vocab)
-   row [b, i] = p(next token | tokens 1..i of sequence b)
-```
+*Left: the components in the order the data passes through them, with tensor shapes beside them. Each sublayer's input also skips around it (the residual connection) and is added to its output at Add & LayerNorm. Right: the same rows for the five-token input "The cat sat on the", with one column per position. Attention (blue) is the only row where positions exchange information, and each position reads only itself and earlier positions. Every other row applies the same weights to each position separately. All five positions predict their next token in the same pass.*
 
-At the input, row $i$ of $x$ describes only token $i$ and its position. After $N$ blocks, row $i$ must contain what is needed to predict token $i+1$. Attention moves information between rows; every other step processes each row separately.
+At the input, the vector for position $i$ describes only token $i$ and its position. After $N$ blocks, it must contain what is needed to predict token $i+1$.
 
 The parameters, with their shapes. The paper does not specify how weights are initialized; the choice below (entries with standard deviation $1/\sqrt{\text{fan-in}}$) keeps activations near unit scale.
 
