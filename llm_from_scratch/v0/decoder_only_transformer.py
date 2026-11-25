@@ -277,7 +277,7 @@ def main():
   uv run %(prog)s train --config quickstart.toml
   uv run %(prog)s generate --config quickstart.toml --prompt "The Moon "
 
-Training streams public FineWeb-Edu data over the internet. An account is optional.
+Training streams public FineWeb-Edu data over the internet. A Hugging Face account is optional.
 Use 'train --help' or 'generate --help' for command options.
 
 uv options
