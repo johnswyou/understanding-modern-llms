@@ -1,13 +1,18 @@
 # FineWeb-Edu decoder
 
-From the repository root, enter the v0 project and run the script with no arguments to see its commands and examples.
+From the repository root, enter the v0 project. On Linux, install PyTorch once with the command that matches the machine. Apple Silicon (macOS 14 or newer) skips this step. For other GPU builds, see [Other PyTorch builds](#other-pytorch-builds). [Install uv](https://docs.astral.sh/uv/getting-started/installation/)
 
 ```sh
 cd llm_from_scratch/v0
-uv run decoder_only_transformer.py
+uv sync --group cpu    # Linux without a GPU
+uv sync --group cuda   # Linux with an NVIDIA GPU and a CUDA 13.0-compatible driver
 ```
 
-Use `train --help` or `generate --help` after the script name for command-specific options. uv creates the project environment on the first invocation. Linux CPU and Apple Silicon (macOS 14 or newer) use the default setup. For a Linux GPU, see [Linux GPU setup](#linux-gpu-setup). [Install uv](https://docs.astral.sh/uv/getting-started/installation/)
+Run the script with no arguments to see its commands and examples. Use `train --help` or `generate --help` after the script name for command-specific options.
+
+```sh
+uv run decoder_only_transformer.py
+```
 
 ## Try it in two commands
 
@@ -65,19 +70,8 @@ Checkpoints store the weights and the resolved training config. Generation **alw
 uv run decoder_only_transformer.py generate --checkpoint checkpoints/decoder-96.pt --prompt "Sunlight "
 ```
 
-## Linux GPU setup
+## Other PyTorch builds
 
-On a Linux GPU with a CUDA 13.0-compatible driver, install the CUDA build of PyTorch once in the project environment.
+For ROCm or another CUDA version, run `uv sync` followed by `uv pip install torch --torch-backend=auto`. [uv PyTorch guide](https://docs.astral.sh/uv/guides/integration/pytorch/)
 
-```sh
-uv sync --no-group cpu --group cuda
-```
-
-For ROCm or another CUDA build, use `uv sync --no-group cpu` followed by `uv pip install torch --torch-backend=auto`. [uv PyTorch guide](https://docs.astral.sh/uv/guides/integration/pytorch/)
-
-After either setup, run the environment's Python directly to keep the selected build. The script detects the GPU automatically.
-
-```sh
-.venv/bin/python decoder_only_transformer.py train --config quickstart.toml
-.venv/bin/python decoder_only_transformer.py generate --config quickstart.toml --prompt "Gravity "
-```
+On Linux, a plain `uv sync` removes PyTorch, because `uv sync` deletes every package the command did not ask for. Repeat the `--group` flag, or the `uv pip install` step, whenever you re-sync. `uv run` only adds missing packages, so it keeps whichever build you installed.

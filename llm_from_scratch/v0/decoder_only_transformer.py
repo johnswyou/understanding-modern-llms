@@ -281,11 +281,10 @@ Training streams public FineWeb-Edu data over the internet. A Hugging Face accou
 Use 'train --help' or 'generate --help' for command options.
 
 uv options
-  Plain 'uv run' handles setup on Linux CPU and Apple Silicon.
+  On Linux, 'uv sync --group cpu' or 'uv sync --group cuda' installs the
+  matching PyTorch build. A later plain 'uv sync' removes it.
   --locked makes uv stop if the dependency lockfile needs updating.
-  For the Linux CUDA build, 'uv sync --no-group cpu --group cuda' skips
-  the default CPU package group and installs the CUDA group. Then run
-  the script with .venv/bin/python. See 'uv run --help' for uv options.""",
+  See 'uv run --help' for uv options.""",
     )
     config_option = {
         "type": Path, "default": argparse.SUPPRESS, "metavar": "FILE",

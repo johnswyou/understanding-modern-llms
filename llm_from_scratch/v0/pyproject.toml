@@ -9,7 +9,6 @@ cpu = ["torch>=2.5; sys_platform == 'linux'"]
 cuda = ["torch>=2.5; sys_platform == 'linux'"]
 
 [tool.uv]
-default-groups = ["cpu"]
 conflicts = [[{ group = "cpu" }, { group = "cuda" }]]
 
 [tool.uv.sources]
