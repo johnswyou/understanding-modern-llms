@@ -161,13 +161,16 @@ def train(config: Config, device):
     training = config.training
     optim = config.optimizer
     path = Path(config.runtime.checkpoint)
+    if path.is_file():
+        print(f"Starting from scratch. Saving this run will replace {path}. "
+              "Use a different checkpoint path to keep both runs.", file=sys.stderr, flush=True)
     torch.manual_seed(training.seed)
     model = Decoder(config.model).to(device)
     optimizer = torch.optim.Adam(model.parameters(), betas=(optim.beta1, optim.beta2),
                                  eps=optim.epsilon, weight_decay=optim.weight_decay)
     if training.verbose:
-        print(f"Opening {DATASET} ({config.data.subset}) on {device}. Waiting for the first batch.",
-              flush=True)
+        print(f"Opening {DATASET} ({config.data.subset}) on {device}. "
+              "Waiting for the first batch before starting the training timer.", flush=True)
     stream = batches(stream_fineweb(config.data), training.batch_size, config.model.context_length)
     batch = next(stream, None)
     if batch is None:
@@ -231,6 +234,7 @@ def generate(config: Config, prompt: str, device):
     model = Decoder(arch)
     model.load_state_dict(checkpoint["model"])
     model.to(device).eval()
+    print(f"Loaded {config.runtime.checkpoint} on {device}.", file=sys.stderr, flush=True)
     generation = config.generation
     if generation.seed is not None:
         torch.manual_seed(generation.seed)
@@ -269,10 +273,11 @@ def main():
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""Examples
-  uv run %(prog)s train --hours 0.25 --verbose
-  uv run %(prog)s generate --prompt "The Moon "
+        epilog="""First run (3.6 seconds of training once the stream is ready)
+  uv run %(prog)s train --config quickstart.toml
+  uv run %(prog)s generate --config quickstart.toml --prompt "The Moon "
 
+Training streams public FineWeb-Edu data over the internet. An account is optional.
 Use 'train --help' or 'generate --help' for command options.
 
 uv options
@@ -284,12 +289,16 @@ uv options
     )
     config_option = {
         "type": Path, "default": argparse.SUPPRESS, "metavar": "FILE",
-        "help": "Optional TOML file. Omitted keys use built-in defaults. "
+        "help": "Optional TOML file. Pass the same file to train and generate to use the same "
+                "checkpoint and sampling settings. Omitted keys use built-in defaults. "
                 "Explicit command-line values override file settings.",
     }
     parser.add_argument("--config", **config_option)
     sub = parser.add_subparsers(dest="command", required=True)
-    training = sub.add_parser("train", help="Pretrain from scratch on streaming FineWeb-Edu")
+    training = sub.add_parser("train", help="Pretrain from scratch on streaming FineWeb-Edu",
+                              description="Each run starts from scratch and replaces its checkpoint on save. "
+                                          "Use a separate checkpoint path for each experiment. "
+                                          "Ctrl-C during training discards this run's unsaved progress.")
     training.add_argument("--hours", type=float,
                           help="Training hours from the first ready batch (0.25 = 15 minutes). "
                                "Required unless the TOML file sets training.hours.")
