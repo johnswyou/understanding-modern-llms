@@ -14,7 +14,6 @@ from pathlib import Path
 
 import torch
 from torch import nn
-from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
 if __package__:
@@ -27,6 +26,58 @@ VOCAB = END_DOCUMENT + 1
 DATASET = "HuggingFaceFW/fineweb-edu"
 
 
+# Hand-written layers, as in deep_dives/1_attention_is_all_you_need. Each keeps the parameter
+# names and shapes of the torch.nn layer it replaced, so existing checkpoints still load.
+class Linear(nn.Module):
+    def __init__(self, fan_in, fan_out, bias):
+        super().__init__()
+        self.weight = nn.Parameter(torch.empty(fan_out, fan_in))   # (fan_out, fan_in), set by Decoder
+        self.bias = nn.Parameter(torch.zeros(fan_out)) if bias else None
+
+    def forward(self, x):                                          # x: (..., fan_in)
+        y = x @ self.weight.T                                      # (..., fan_out)
+        return y if self.bias is None else y + self.bias
+
+
+class Embedding(nn.Module):
+    def __init__(self, vocab, width):
+        super().__init__()
+        self.weight = nn.Parameter(torch.empty(vocab, width))      # row t is token t's vector
+
+    def forward(self, ids):                                        # ids: (B, n) token ids
+        return self.weight[ids]                                    # (B, n, width)
+
+
+class LayerNorm(nn.Module):
+    def __init__(self, width, eps):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(width))              # gamma
+        self.bias = nn.Parameter(torch.zeros(width))               # beta
+
+    def forward(self, x):                                          # x: (B, n, width)
+        mean = x.mean(-1, keepdim=True)                            # (B, n, 1)  mu for each position
+        var = ((x - mean) ** 2).mean(-1, keepdim=True)             # (B, n, 1)  sigma^2 for each position
+        return self.weight * (x - mean) / torch.sqrt(var + self.eps) + self.bias
+
+
+class ReLU(nn.Module):
+    def forward(self, x):
+        return torch.relu(x)
+
+
+class GELU(nn.Module):
+    def forward(self, x):
+        return 0.5 * x * (1 + torch.erf(x / math.sqrt(2)))         # x * Phi(x), the exact (not tanh) form
+
+
+def dropout(x, p, training):
+    if not training or p == 0:                                     # p == 0 skips the random draw
+        return x
+    keep = torch.rand_like(x) > p                                  # same shape as x: True = keep
+    return x * keep / (1 - p)
+
+
 class DecoderBlock(nn.Module):
     """Masked self-attention followed by a position-wise feed-forward layer."""
 
@@ -35,19 +86,19 @@ class DecoderBlock(nn.Module):
         width = config.width
         self.heads = config.heads
         self.pre_norm = config.pre_norm
-        self.q = nn.Linear(width, width, bias=config.attention_bias)
-        self.k = nn.Linear(width, width, bias=config.attention_bias)
-        self.v = nn.Linear(width, width, bias=config.attention_bias)
-        self.out = nn.Linear(width, width, bias=config.attention_bias)
+        self.q = Linear(width, width, bias=config.attention_bias)
+        self.k = Linear(width, width, bias=config.attention_bias)
+        self.v = Linear(width, width, bias=config.attention_bias)
+        self.out = Linear(width, width, bias=config.attention_bias)
         self.ff = nn.Sequential(
-            nn.Linear(width, config.ff_width, bias=config.ff_bias),
-            nn.ReLU() if config.activation == "relu" else nn.GELU(),
-            nn.Linear(config.ff_width, width, bias=config.ff_bias),
+            Linear(width, config.ff_width, bias=config.ff_bias),
+            ReLU() if config.activation == "relu" else GELU(),
+            Linear(config.ff_width, width, bias=config.ff_bias),
         )
-        self.norm1 = nn.LayerNorm(width, eps=config.layer_norm_eps)
-        self.norm2 = nn.LayerNorm(width, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.residual_dropout)
-        self.attention_dropout = nn.Dropout(config.attention_dropout)
+        self.norm1 = LayerNorm(width, eps=config.layer_norm_eps)
+        self.norm2 = LayerNorm(width, eps=config.layer_norm_eps)
+        self.residual_dropout = config.residual_dropout
+        self.attention_dropout = config.attention_dropout
 
     def attention(self, x, mask):
         batch, length, width = x.shape
@@ -59,15 +110,17 @@ class DecoderBlock(nn.Module):
         q, k, v = (split_heads(projection(x)) for projection in (self.q, self.k, self.v))
         scores = q @ k.transpose(-2, -1) / math.sqrt(head_width)
         weights = scores.masked_fill(~mask, float("-inf")).softmax(dim=-1)
-        heads = (self.attention_dropout(weights) @ v).transpose(1, 2).reshape(batch, length, width)
+        weights = dropout(weights, self.attention_dropout, self.training)
+        heads = (weights @ v).transpose(1, 2).reshape(batch, length, width)
         return self.out(heads)
 
     def forward(self, x, mask):
+        p, training = self.residual_dropout, self.training
         if self.pre_norm:
-            x = x + self.dropout(self.attention(self.norm1(x), mask))
-            return x + self.dropout(self.ff(self.norm2(x)))
-        x = self.norm1(x + self.dropout(self.attention(x, mask)))
-        return self.norm2(x + self.dropout(self.ff(x)))
+            x = x + dropout(self.attention(self.norm1(x), mask), p, training)
+            return x + dropout(self.ff(self.norm2(x)), p, training)
+        x = self.norm1(x + dropout(self.attention(x, mask), p, training))
+        return self.norm2(x + dropout(self.ff(x), p, training))
 
 
 class Decoder(nn.Module):
@@ -75,11 +128,11 @@ class Decoder(nn.Module):
         super().__init__()
         width = config.width
         length = config.context_length
-        self.embedding = nn.Embedding(VOCAB, width)
+        self.embedding = Embedding(VOCAB, width)
         self.embedding_scale = math.sqrt(width) if config.scale_embeddings else 1.0
         self.blocks = nn.ModuleList(DecoderBlock(config) for _ in range(config.layers))
-        self.dropout = nn.Dropout(config.embedding_dropout)
-        self.output = None if config.tie_embeddings else nn.Linear(width, VOCAB, bias=False)
+        self.embedding_dropout = config.embedding_dropout
+        self.output = None if config.tie_embeddings else Linear(width, VOCAB, bias=False)
         positions = torch.arange(length)[:, None]
         angles = positions / (config.position_base ** (torch.arange(0, width, 2) / width))
         pe = torch.empty(length, width)
@@ -91,18 +144,18 @@ class Decoder(nn.Module):
 
         nn.init.normal_(self.embedding.weight, std=config.init_scale / math.sqrt(width))
         for layer in self.modules():
-            if isinstance(layer, nn.Linear):
-                nn.init.normal_(layer.weight, std=config.init_scale / math.sqrt(layer.in_features))
-                if layer.bias is not None:
-                    nn.init.zeros_(layer.bias)
+            if isinstance(layer, Linear):                          # biases already start at 0
+                fan_in = layer.weight.shape[1]
+                nn.init.normal_(layer.weight, std=config.init_scale / math.sqrt(fan_in))
 
     def forward(self, ids):
         length = ids.size(1)
-        x = self.dropout(self.embedding(ids) * self.embedding_scale + self.positions[:length])
+        x = self.embedding(ids) * self.embedding_scale + self.positions[:length]
+        x = dropout(x, self.embedding_dropout, self.training)
         for block in self.blocks:
             x = block(x, self.mask[:length, :length])
         if self.output is None:
-            return F.linear(x, self.embedding.weight)
+            return x @ self.embedding.weight.T                     # tied: E also scores the next token
         return self.output(x)
 
 
@@ -172,6 +225,14 @@ def save_checkpoint(model, path, steps, config):
         staging.unlink(missing_ok=True)
 
 
+def cross_entropy(logits, targets, label_smoothing):
+    # logits: (B, n, VOCAB)    targets: (B, n) token ids
+    logp = logits.log_softmax(dim=-1)                              # (B, n, VOCAB)  log p for every token
+    nll = -logp.gather(-1, targets[..., None]).squeeze(-1)         # (B, n)  -log p(correct token)
+    smooth = -logp.mean(-1)                                        # (B, n)  mean of -log p over all tokens
+    return ((1 - label_smoothing) * nll + label_smoothing * smooth).mean()
+
+
 def train(config: Config, device):
     training = config.training
     optim = config.optimizer
@@ -204,9 +265,7 @@ def train(config: Config, device):
             group["lr"] = lr
         x, targets = (tensor.to(device) for tensor in batch)
         optimizer.zero_grad(set_to_none=True)
-        logits = model(x)
-        loss = F.cross_entropy(logits.flatten(0, 1), targets.flatten(),
-                               label_smoothing=training.label_smoothing)
+        loss = cross_entropy(model(x), targets, training.label_smoothing)
         loss.backward()
         optimizer.step()
         if device.type == "cuda":

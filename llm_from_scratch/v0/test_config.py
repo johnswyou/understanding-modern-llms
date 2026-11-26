@@ -12,9 +12,11 @@ from pathlib import Path
 
 import torch
 from pydantic import ValidationError
+from torch.nn import functional as F
 
 from config import Config, load_config
-from decoder_only_transformer import Decoder, batches, exit_with_trainer, generate, save_checkpoint
+from decoder_only_transformer import (GELU, Decoder, LayerNorm, Linear, batches, cross_entropy,
+                                      dropout, exit_with_trainer, generate, save_checkpoint)
 
 
 class ConfigTests(unittest.TestCase):
@@ -59,6 +61,25 @@ class ConfigTests(unittest.TestCase):
             with redirect_stdout(io.StringIO()) as out:
                 generate(Config.model_validate(inference), "a prompt longer than seven bytes", torch.device("cpu"))
             self.assertEqual(out.getvalue(), "a prompt longer than seven bytes\\x00\\x00\n")
+
+
+class LayerTests(unittest.TestCase):
+    def test_hand_written_layers_match_torch(self):
+        torch.manual_seed(0)
+        x = torch.randn(2, 5, 8)
+        linear = Linear(8, 3, bias=True)
+        torch.nn.init.normal_(linear.weight)
+        torch.nn.init.normal_(linear.bias)
+        torch.testing.assert_close(linear(x), F.linear(x, linear.weight, linear.bias))
+        torch.testing.assert_close(LayerNorm(8, eps=1e-6)(x), F.layer_norm(x, (8,), eps=1e-6))
+        torch.testing.assert_close(GELU()(x), F.gelu(x))
+        targets = torch.randint(0, 8, (2, 5))
+        torch.testing.assert_close(cross_entropy(x, targets, 0.1), F.cross_entropy(
+            x.flatten(0, 1), targets.flatten(), label_smoothing=0.1))
+        dropped = dropout(torch.ones(100_000), 0.1, training=True)
+        self.assertAlmostEqual((dropped == 0).float().mean().item(), 0.1, delta=0.005)
+        self.assertAlmostEqual(dropped.mean().item(), 1.0, delta=0.01)
+        self.assertIs(dropout(x, 0.1, training=False), x)
 
 
 def watch_then_sleep(trainer_pid):
