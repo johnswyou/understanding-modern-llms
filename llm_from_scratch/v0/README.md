@@ -61,10 +61,12 @@ uv run decoder_only_transformer.py generate --config experiment.toml --prompt "S
 | --- | --- |
 | `[model]` | Context, width, heads, feed-forward size, depth, dropout, projection biases, activation, normalization, sinusoidal positions, embedding scaling and tying, initialization |
 | `[optimizer]` | Adam betas, epsilon, weight decay, warmup steps, and learning-rate multiplier |
-| `[training]` | Hours, batch size, label smoothing, random seed, verbose output, and log interval |
+| `[training]` | Hours, batch size, label smoothing, random seed, verbose output, log interval, mixed precision, and compilation |
 | `[data]` | FineWeb-Edu subset, dataset revision, and reader process count |
 | `[runtime]` | Device and checkpoint path, relative to the working directory |
 | `[generation]` | Maximum new tokens, sampling temperature, and optional sampling seed |
+
+`training.mixed_precision` and `training.compile` speed up training on a GPU and are off by default. They apply to `decoder_only_transformer.py`. The educational file accepts both settings and ignores them: it always trains uncompiled in float32. Run `uv run benchmark_speed.py` to measure what each gains on your machine.
 
 Explicit CLI flags override TOML values. Omitted fields use their built-in defaults. Supply the duration with either `training.hours` or `--hours`. The timer starts when the first batch is ready and includes subsequent reads and accelerator work. A read or optimizer step in progress can finish past the `--hours` deadline.
 

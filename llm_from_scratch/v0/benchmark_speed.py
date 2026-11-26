@@ -10,7 +10,6 @@ final losses should agree closely. Nothing here changes decoder_only_transformer
 import argparse
 import gc
 import time
-import types
 from contextlib import nullcontext
 from pathlib import Path
 from statistics import median
@@ -26,7 +25,6 @@ BASELINE = "baseline (current code)"
 UNSCALED = "autocast float16, no GradScaler"  # Timing only: float16 gradients can underflow.
 VARIANTS = {
     BASELINE: {},
-    "scaled_dot_product_attention": {"sdpa": True},
     "fused Adam": {"fused": True},
     "autocast bfloat16": {"autocast": torch.bfloat16},
     "autocast float16 + GradScaler": {"autocast": torch.float16, "scaler": True},
@@ -36,28 +34,12 @@ VARIANTS = {
 }
 
 
-def sdpa_attention(self, x, mask):
-    """DecoderBlock.attention with PyTorch's fused attention in place of scores, mask and softmax."""
-    batch, length, width = x.shape
-
-    def split_heads(tensor):
-        return tensor.reshape(batch, length, self.heads, width // self.heads).transpose(1, 2)
-
-    q, k, v = (split_heads(projection(x)) for projection in (self.q, self.k, self.v))
-    dropout = self.attention_dropout.p if self.training else 0.0
-    heads = F.scaled_dot_product_attention(q, k, v, is_causal=True, dropout_p=dropout)
-    return self.out(heads.transpose(1, 2).reshape(batch, length, width))
-
-
-def measure(config, device, batch, steps, sdpa=False, fused=None, autocast=None, scaler=False,
-            compile=False, tf32=False):
+def measure(config, device, batch, steps, fused=None, autocast=None, scaler=False, compile=False,
+            tf32=False):
     """Return (median seconds per step, seconds for the first step, final loss)."""
     torch.set_float32_matmul_precision("high" if tf32 else "highest")
     torch.manual_seed(0)
     model = Decoder(config.model).to(device)
-    if sdpa:
-        for block in model.blocks:
-            block.attention = types.MethodType(sdpa_attention, block)
     optim = config.optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, betas=(optim.beta1, optim.beta2),
                                  eps=optim.epsilon, weight_decay=optim.weight_decay, fused=fused)

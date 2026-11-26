@@ -33,6 +33,9 @@ label_smoothing = 0.1
 seed = 0
 verbose = false
 log_interval_seconds = 5.0
+# The next two apply to decoder_only_transformer.py. The educational file ignores them.
+mixed_precision = false   # true runs the forward pass in bfloat16 on a GPU; ignored on CPU
+compile = false           # true runs torch.compile on the model; the first step compiles
 
 [data]
 subset = "sample-10BT"    # HuggingFaceFW/fineweb-edu configuration

@@ -58,6 +58,8 @@ class Training(Settings):
     seed: Seed = 0
     verbose: bool = False
     log_interval_seconds: PositiveFloat = 5.0
+    mixed_precision: bool = False
+    compile: bool = False
 
 
 class Data(Settings):

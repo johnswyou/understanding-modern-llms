@@ -1,5 +1,7 @@
 # 14-hour FineWeb-Edu pretraining preset for Apple M3 Pro (18-core GPU, 36 GB RAM).
-# 14.28M parameters (~1.1B bytes / ~79 bytes/param over 14h, ~5.5-6.2 GB MPS memory).
+# 14.28M parameters, ~5.5-6.2 GB MPS memory in float32. With mixed_precision and compile on, an
+# estimated ~105k steps in 14h (~1.7B bytes, ~120 bytes/param). The estimate scales the 6-layer
+# measurement in m3-pro.toml. Measure it: uv run benchmark_speed.py --config m3-pro-14h.toml
 
 [model]
 context_length = 512      # ~90-100 English words per window                                                                                                                                         
@@ -25,8 +27,8 @@ beta1 = 0.9
 beta2 = 0.95
 epsilon = 1e-8
 weight_decay = 0.0        # torch.optim.Adam uses coupled L2, not AdamW
-warmup_steps = 2500       # ~3.6% of ~69k steps in 14h
-lr_multiplier = 0.7       # Peak LR = 7.1e-4 at step 2,500; ~1.4e-4 at step 69,000
+warmup_steps = 2500       # ~2.4% of an estimated ~105k steps in 14h
+lr_multiplier = 0.7       # Peak LR = 7.1e-4 at step 2,500; ~1.1e-4 at step 105,000
 
 [training]
 hours = 14.0
@@ -35,6 +37,8 @@ label_smoothing = 0.0     # Avoids putting probability mass on invalid/control U
 seed = 0
 verbose = true
 log_interval_seconds = 30.0
+mixed_precision = true    # As in m3-pro.toml, where the speed-up was measured at 6 layers
+compile = true
 
 [data]
 subset = "sample-10BT"

@@ -8,6 +8,7 @@ import sys
 import tempfile
 import threading
 import time
+from contextlib import nullcontext
 from functools import partial
 from itertools import islice
 from pathlib import Path
@@ -47,26 +48,26 @@ class DecoderBlock(nn.Module):
         self.norm1 = nn.LayerNorm(width, eps=config.layer_norm_eps)
         self.norm2 = nn.LayerNorm(width, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.residual_dropout)
-        self.attention_dropout = nn.Dropout(config.attention_dropout)
+        self.attention_dropout = config.attention_dropout
 
-    def attention(self, x, mask):
+    def attention(self, x):
         batch, length, width = x.shape
-        head_width = width // self.heads
 
         def split_heads(tensor):
-            return tensor.reshape(batch, length, self.heads, head_width).transpose(1, 2)
+            return tensor.reshape(batch, length, self.heads, width // self.heads).transpose(1, 2)
 
         q, k, v = (split_heads(projection(x)) for projection in (self.q, self.k, self.v))
-        scores = q @ k.transpose(-2, -1) / math.sqrt(head_width)
-        weights = scores.masked_fill(~mask, float("-inf")).softmax(dim=-1)
-        heads = (self.attention_dropout(weights) @ v).transpose(1, 2).reshape(batch, length, width)
-        return self.out(heads)
+        # One fused call for softmax(q @ k.T / sqrt(head_width) + causal mask) @ v, with dropout
+        # on the attention weights. decoder_only_transformer_educational.py writes the steps out.
+        dropout = self.attention_dropout if self.training else 0.0
+        heads = F.scaled_dot_product_attention(q, k, v, is_causal=True, dropout_p=dropout)
+        return self.out(heads.transpose(1, 2).reshape(batch, length, width))
 
-    def forward(self, x, mask):
+    def forward(self, x):
         if self.pre_norm:
-            x = x + self.dropout(self.attention(self.norm1(x), mask))
+            x = x + self.dropout(self.attention(self.norm1(x)))
             return x + self.dropout(self.ff(self.norm2(x)))
-        x = self.norm1(x + self.dropout(self.attention(x, mask)))
+        x = self.norm1(x + self.dropout(self.attention(x)))
         return self.norm2(x + self.dropout(self.ff(x)))
 
 
@@ -86,8 +87,6 @@ class Decoder(nn.Module):
         pe[:, 0::2] = angles.sin()
         pe[:, 1::2] = angles[:, :width // 2].cos()
         self.register_buffer("positions", pe, persistent=False)
-        self.register_buffer("mask", torch.ones(length, length, dtype=torch.bool).tril(),
-                             persistent=False)
 
         nn.init.normal_(self.embedding.weight, std=config.init_scale / math.sqrt(width))
         for layer in self.modules():
@@ -100,7 +99,7 @@ class Decoder(nn.Module):
         length = ids.size(1)
         x = self.dropout(self.embedding(ids) * self.embedding_scale + self.positions[:length])
         for block in self.blocks:
-            x = block(x, self.mask[:length, :length])
+            x = block(x)
         if self.output is None:
             return F.linear(x, self.embedding.weight)
         return self.output(x)
@@ -183,6 +182,12 @@ def train(config: Config, device):
     model = Decoder(config.model).to(device)
     optimizer = torch.optim.Adam(model.parameters(), betas=(optim.beta1, optim.beta2),
                                  eps=optim.epsilon, weight_decay=optim.weight_decay)
+    # Checkpoints are saved from `model`, so compiling does not change their key names.
+    forward = torch.compile(model) if training.compile else model
+    # Most CPUs emulate 16-bit floats, which takes minutes per step.
+    mixed_precision = training.mixed_precision and device.type != "cpu"
+    if training.mixed_precision and not mixed_precision:
+        print("training.mixed_precision is ignored on the cpu device.", file=sys.stderr, flush=True)
     if training.verbose:
         print(f"Opening {DATASET} ({config.data.subset}) on {device}. "
               "Waiting for the first batch before starting the training timer.", flush=True)
@@ -204,9 +209,10 @@ def train(config: Config, device):
             group["lr"] = lr
         x, targets = (tensor.to(device) for tensor in batch)
         optimizer.zero_grad(set_to_none=True)
-        logits = model(x)
-        loss = F.cross_entropy(logits.flatten(0, 1), targets.flatten(),
-                               label_smoothing=training.label_smoothing)
+        with torch.autocast(device.type, dtype=torch.bfloat16) if mixed_precision else nullcontext():
+            logits = forward(x)
+            loss = F.cross_entropy(logits.flatten(0, 1), targets.flatten(),
+                                   label_smoothing=training.label_smoothing)
         loss.backward()
         optimizer.step()
         if device.type == "cuda":

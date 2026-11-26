@@ -2,7 +2,8 @@
 
 Educational copy of decoder_only_transformer.py: the layers and the loss are written by hand
 instead of using torch.nn, so the math is visible. It computes the same model, more slowly.
-Checkpoints work with either file.
+Checkpoints work with either file. It ignores training.mixed_precision and training.compile:
+it always trains uncompiled in float32.
 """
 
 import argparse
