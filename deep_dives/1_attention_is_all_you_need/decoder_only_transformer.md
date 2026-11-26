@@ -106,13 +106,24 @@ The paper uses fixed sinusoids. For position $pos$ and dimension pair $i = 0, 1,
 
 $$PE_{pos,\,2i} = \sin(\omega_i \cdot pos), \qquad PE_{pos,\,2i+1} = \cos(\omega_i \cdot pos), \qquad \omega_i = 10000^{-2i/d_{model}}$$
 
-Each pair of dimensions is a sine and a cosine at one frequency. The wavelength $2\pi/\omega_i$ grows geometrically from $2\pi$ (dimension 0 repeats about every 6 positions) to $10000 \cdot 2\pi$ (the last dimensions barely change over thousands of positions). Every position therefore gets a different combination of values.
+With the code's $d_{model} = 64$:
+
+| Pair $i$ | Even dimension $2i$ | Odd dimension $2i+1$ | $\omega_i$ |
+|---|---|---|---|
+| 0 | 0: $\sin(pos)$ | 1: $\cos(pos)$ | 1 |
+| 1 | 2: $\sin(0.75\,pos)$ | 3: $\cos(0.75\,pos)$ | 0.75 |
+| ⋮ | ⋮ | ⋮ | ⋮ |
+| 31 | 62: $\sin(0.00013\,pos)$ | 63: $\cos(0.00013\,pos)$ | 0.00013 |
+
+Each pair of dimensions is a sine and a cosine at one frequency. The wavelength $2\pi/\omega_i$ grows geometrically from $2\pi$ (dimension 0 repeats about every 6 positions) to $10000 \cdot 2\pi$ (the last dimensions barely change over thousands of positions).
 
 ![Sinusoidal positional encoding](figures/positional_encoding.png)
 
-*Left: each row is the vector added at one position. Right: three columns of the same matrix plotted against position. Low dimensions change fast, high dimensions change slowly.*
+*Left: the positional-encoding matrix for 100 positions with $d_{model} = 128$. Right: three columns of the same matrix plotted against position. Low dimensions change fast, high dimensions change slowly.*
 
-The authors chose sinusoids because, for any fixed offset $k$, $PE_{pos+k}$ is a linear function of $PE_{pos}$. For one pair of dimensions, by the angle-addition formulas:
+**Why sinusoidal positional-encoding?**
+
+The model often needs relative position, such as "the previous token" or "the token 3 back". For any fixed offset $k$, $PE_{pos+k}$ is a linear function of $PE_{pos}$. Dimensions $2i$ and $2i+1$ of $PE_{pos}$ hold $\sin(\omega_i, pos)$ and $\cos(\omega_i, pos)$. By the angle-addition formulas, the same two dimensions at position $pos+k$ are:
 
 $$\begin{pmatrix}\sin(\omega_i (pos+k))\\ \cos(\omega_i (pos+k))\end{pmatrix} = \begin{pmatrix}\cos \omega_i k & \sin \omega_i k\\ -\sin \omega_i k & \cos \omega_i k\end{pmatrix}\begin{pmatrix}\sin \omega_i\, pos\\ \cos \omega_i\, pos\end{pmatrix}$$
 
@@ -243,6 +254,20 @@ $$\text{LayerNorm}(x) = \gamma \odot \frac{x - \mu}{\sqrt{\sigma^2 + \epsilon}} 
 $\odot$ is entry-by-entry multiplication, and $\epsilon = 10^{-6}$ prevents division by zero. Without the normalization, each residual addition could change the scale of $x$, and the scale would drift over $2N$ additions.
 
 Dropout is used only during training. It sets each entry to 0 with probability $p_{drop}$ and multiplies the remaining entries by $1/(1 - p_{drop})$, so the expected value of each entry is unchanged. Because any activation can disappear, the network cannot depend on a single one, which reduces overfitting. The paper applies dropout to each sublayer's output before the residual addition, and to the sum of embeddings and positional encodings. Removing it made the paper's model clearly worse.
+
+<details>
+<summary>Why multiply undropped entries by $1/(1 - p_{drop})$?</summary>
+
+Multiplying undropped elements by $1/(1 - p_{drop})$ preserves the expected value of each entry. But what does "expected value" mean here?
+
+Suppose an entry has value $4$ and the dropout probability is $0.2$. Each time we apply dropout to that same input, there are two possible outcomes.
+
+- With probability $0.2$, dropout sets the entry to $0$.
+- With probability $0.8$, dropout keeps the entry and scales it up to $4 / 0.8 = 5$.
+
+The expected value is the probability-weighted average, $0.2 \times 0 + 0.8 \times 5 = 4$. Over many independent applications of dropout to this input, the average output approaches the original value of $4$. Dividing by the probability of keeping the entry, $1 - p_{drop}$, is what makes that work.
+
+</details>
 
 ```python
 def layer_norm(x, g, b, eps=1e-6):
