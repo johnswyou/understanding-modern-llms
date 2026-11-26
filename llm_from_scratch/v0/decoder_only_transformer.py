@@ -280,11 +280,9 @@ def main():
 Training streams public FineWeb-Edu data over the internet. A Hugging Face account is optional.
 Use 'train --help' or 'generate --help' for command options.
 
-uv options
-  On Linux, 'uv sync --group cpu' or 'uv sync --group cuda' installs the
-  matching PyTorch build. A later plain 'uv sync' removes it.
-  --locked makes uv stop if the dependency lockfile needs updating.
-  See 'uv run --help' for uv options.""",
+Linux setup (macOS needs none)
+  Install PyTorch once: 'uv sync --group cpu' (no GPU) or 'uv sync --group cuda' (NVIDIA GPU).
+  A plain 'uv sync' afterward uninstalls PyTorch. Rerun the same --group command to restore it.""",
     )
     config_option = {
         "type": Path, "default": argparse.SUPPRESS, "metavar": "FILE",
