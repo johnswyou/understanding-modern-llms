@@ -15,8 +15,9 @@ from pydantic import ValidationError
 from torch.nn import functional as F
 
 from config import Config, load_config
-from decoder_only_transformer import (GELU, Decoder, LayerNorm, Linear, batches, cross_entropy,
-                                      dropout, exit_with_trainer, generate, save_checkpoint)
+import decoder_only_transformer_educational as educational
+from decoder_only_transformer import Decoder, batches, exit_with_trainer, generate, save_checkpoint
+from decoder_only_transformer_educational import GELU, LayerNorm, Linear, cross_entropy, dropout
 
 
 class ConfigTests(unittest.TestCase):
@@ -80,6 +81,16 @@ class LayerTests(unittest.TestCase):
         self.assertAlmostEqual((dropped == 0).float().mean().item(), 0.1, delta=0.005)
         self.assertAlmostEqual(dropped.mean().item(), 1.0, delta=0.01)
         self.assertIs(dropout(x, 0.1, training=False), x)
+
+    def test_educational_decoder_matches_fast_decoder(self):
+        config = Config.model_validate({"model": {"context_length": 7, "width": 15, "ff_width": 18,
+                                                  "heads": 3, "tie_embeddings": False,
+                                                  "pre_norm": True, "activation": "gelu"}})
+        fast = Decoder(config.model).eval()
+        slow = educational.Decoder(config.model).eval()
+        slow.load_state_dict(fast.state_dict())                # same checkpoint format
+        ids = torch.randint(0, 257, (2, 7))
+        torch.testing.assert_close(slow(ids), fast(ids))
 
 
 def watch_then_sleep(trainer_pid):

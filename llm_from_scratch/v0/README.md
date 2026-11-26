@@ -16,6 +16,8 @@ Run the script with no arguments to see its commands and examples. Use `train --
 uv run decoder_only_transformer.py
 ```
 
+`decoder_only_transformer_educational.py` takes the same commands and computes the same model, with its layers and loss written by hand so the math is visible. It trains more slowly. Checkpoints work with either file.
+
 ## Try it in two commands
 
 The first command streams public FineWeb-Edu text over the internet. You can train without a Hugging Face account, including when the library prints a warning about anonymous requests. The [quickstart config](quickstart.toml) gives the model **3.6 seconds of training**. Allow extra time for setup and the first batch.
