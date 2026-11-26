@@ -5,8 +5,10 @@ From the repository root, enter the v0 project. On Linux, install PyTorch once w
 ```sh
 cd llm_from_scratch/v0
 uv sync --group cpu    # Linux without a GPU
-uv sync --group cuda   # Linux with an NVIDIA GPU and a CUDA 13.0-compatible driver
+uv sync --group cuda   # Linux with an NVIDIA GPU and driver 580 or newer (CUDA 13.0)
 ```
+
+To check your driver, run `nvidia-smi`. The header shows the newest CUDA version the driver supports. If it is below 13.0, use [Other PyTorch builds](#other-pytorch-builds) instead. Otherwise PyTorch cannot reach the GPU and training silently runs on the CPU.
 
 Run the script with no arguments to see its commands and examples. Use `train --help` or `generate --help` after the script name for command-specific options.
 
@@ -72,6 +74,13 @@ uv run decoder_only_transformer.py generate --checkpoint checkpoints/decoder-96.
 
 ## Other PyTorch builds
 
-For ROCm or another CUDA version, run `uv sync` followed by `uv pip install torch --torch-backend=auto`. [uv PyTorch guide](https://docs.astral.sh/uv/guides/integration/pytorch/)
+For an NVIDIA driver older than 580, or an AMD GPU (ROCm), run:
+
+```sh
+uv sync
+uv pip install torch --torch-backend=auto
+```
+
+`--torch-backend=auto` reads the installed driver and picks the newest PyTorch build that driver can run. `uv.lock` does not pin this build, so its PyTorch version can differ from the locked one. [uv PyTorch guide](https://docs.astral.sh/uv/guides/integration/pytorch/)
 
 On Linux, a plain `uv sync` removes PyTorch, because `uv sync` deletes every package the command did not ask for. Repeat the `--group` flag, or the `uv pip install` step, whenever you re-sync. `uv run` only adds missing packages, so it keeps whichever build you installed.

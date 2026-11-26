@@ -281,7 +281,8 @@ Training streams public FineWeb-Edu data over the internet. A Hugging Face accou
 Use 'train --help' or 'generate --help' for command options.
 
 Linux setup (macOS needs none)
-  Install PyTorch once: 'uv sync --group cpu' (no GPU) or 'uv sync --group cuda' (NVIDIA GPU).
+  Install PyTorch once: 'uv sync --group cpu' (no GPU) or 'uv sync --group cuda' (NVIDIA GPU,
+  driver 580 or newer). For an older driver, see 'Other PyTorch builds' in README.md.
   A plain 'uv sync' afterward uninstalls PyTorch. Rerun the same --group command to restore it.""",
     )
     config_option = {
