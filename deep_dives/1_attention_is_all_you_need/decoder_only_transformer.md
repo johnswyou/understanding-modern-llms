@@ -2,7 +2,7 @@
 
 Vaswani et al. (2017) introduced the Transformer, a neural network that processes sequences using attention alone, with no recurrence. Their model was an encoder-decoder built for translation: the encoder reads the source sentence and the decoder writes the translation one token at a time. GPT-style language models use only the decoder, without the sublayer that reads from the encoder. This note derives that decoder from first principles and implements it in PyTorch with raw tensor operations. No `torch.nn` layers are used; the only library component is the `torch.optim.Adam` optimizer.
 
-The Python blocks, run in order from the repository root, form one script. It builds the model, checks it, trains it on the text of the paper for under two minutes on a CPU, and generates text. Run it with any PyTorch 2.x install.
+The Python blocks, run in order, form one script. It builds the model, checks it, trains it on the text of the paper for under two minutes on a CPU, and generates text. Run it with any PyTorch 2.x install.
 
 ## 1. The task: predict the next token
 
