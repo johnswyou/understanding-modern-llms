@@ -6,7 +6,9 @@ import math
 import os
 import sys
 import tempfile
+import threading
 import time
+from functools import partial
 from itertools import islice
 from pathlib import Path
 
@@ -112,7 +114,20 @@ def stream_fineweb(data):
     # The timer can stop mid-shard. Keep Parquet's background reads in a worker
     # that can exit independently of the trainer and its CUDA/MPS runtime.
     return DataLoader(rows, batch_size=None, num_workers=data.workers,
-                      multiprocessing_context="forkserver")
+                      multiprocessing_context="forkserver",
+                      worker_init_fn=partial(exit_with_trainer, os.getpid()))
+
+
+def exit_with_trainer(trainer_pid, worker_id):
+    """Stop this reader when the trainer dies without shutting it down (kill, crash, out of memory)."""
+    def watch():
+        while True:
+            time.sleep(1)
+            try:
+                os.kill(trainer_pid, 0)
+            except OSError:
+                os._exit(0)  # A normal exit can wait forever on Parquet's background reads.
+    threading.Thread(target=watch, daemon=True).start()
 
 
 def token_stream(rows):

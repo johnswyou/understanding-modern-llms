@@ -1,7 +1,11 @@
 """Regression tests for changing the architecture independently of the CLI and weights."""
 
 import io
+import multiprocessing
+import subprocess
+import sys
 import tempfile
+import time
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -10,7 +14,7 @@ import torch
 from pydantic import ValidationError
 
 from config import Config, load_config
-from decoder_only_transformer import Decoder, batches, generate, save_checkpoint
+from decoder_only_transformer import Decoder, batches, exit_with_trainer, generate, save_checkpoint
 
 
 class ConfigTests(unittest.TestCase):
@@ -55,6 +59,25 @@ class ConfigTests(unittest.TestCase):
             with redirect_stdout(io.StringIO()) as out:
                 generate(Config.model_validate(inference), "a prompt longer than seven bytes", torch.device("cpu"))
             self.assertEqual(out.getvalue(), "a prompt longer than seven bytes\\x00\\x00\n")
+
+
+def watch_then_sleep(trainer_pid):
+    exit_with_trainer(trainer_pid, worker_id=0)
+    time.sleep(60)
+
+
+class ReaderTests(unittest.TestCase):
+    def test_reader_exits_when_trainer_dies(self):
+        trainer = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        self.addCleanup(trainer.kill)
+        reader = multiprocessing.get_context("forkserver").Process(target=watch_then_sleep,
+                                                                   args=(trainer.pid,))
+        reader.start()
+        self.addCleanup(reader.kill)
+        trainer.kill()
+        trainer.wait()
+        reader.join(timeout=5)
+        self.assertEqual(reader.exitcode, 0)
 
 
 if __name__ == "__main__":
