@@ -123,7 +123,7 @@ Each pair of dimensions is a sine and a cosine at one frequency. The wavelength 
 
 **Why sinusoidal positional-encoding?**
 
-The model often needs relative position, such as "the previous token" or "the token 3 back". For any fixed offset $k$, $PE_{pos+k}$ is a linear function of $PE_{pos}$. Dimensions $2i$ and $2i+1$ of $PE_{pos}$ hold $\sin(\omega_i, pos)$ and $\cos(\omega_i, pos)$. By the angle-addition formulas, the same two dimensions at position $pos+k$ are:
+The model often needs relative position, such as "the previous token" or "the token 3 back". For any fixed offset $k$, $PE_{pos+k}$ is a linear function of $PE_{pos}$. Dimensions $2i$ and $2i+1$ of $PE_{pos}$ hold $\sin(\omega_i\, pos)$ and $\cos(\omega_i\, pos)$. By the angle-addition formulas, the same two dimensions at position $pos+k$ are:
 
 $$\begin{pmatrix}\sin(\omega_i (pos+k))\\ \cos(\omega_i (pos+k))\end{pmatrix} = \begin{pmatrix}\cos \omega_i k & \sin \omega_i k\\ -\sin \omega_i k & \cos \omega_i k\end{pmatrix}\begin{pmatrix}\sin \omega_i\, pos\\ \cos \omega_i\, pos\end{pmatrix}$$
 
