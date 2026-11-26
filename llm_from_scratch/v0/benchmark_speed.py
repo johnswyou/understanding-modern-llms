@@ -72,8 +72,8 @@ def measure(config, device, batch, steps, fused=None, autocast=None, scaler=Fals
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--config", type=Path, default=Path(__file__).with_name("m3-pro.toml"),
-                        help="TOML file that sets the model size and batch size (default m3-pro.toml).")
+    parser.add_argument("--config", type=Path, default=Path(__file__).parent / "configs/11m.toml",
+                        help="TOML file that sets the model size and batch size (default configs/11m.toml).")
     parser.add_argument("--batch-size", type=int,
                         help="Context windows per step (default: the config's training.batch_size).")
     parser.add_argument("--steps", type=int, default=10,

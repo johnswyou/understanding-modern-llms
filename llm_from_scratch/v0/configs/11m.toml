@@ -1,7 +1,7 @@
-# 7-hour FineWeb-Edu pretraining preset for Apple M3 Pro (18-core GPU, 36 GB RAM).
-# ~10.74M parameters. With mixed_precision and compile on, benchmark_speed.py measured ~45k
-# bytes/s: ~69k steps in 7h (~1.1B bytes, ~105 bytes/param). ~4.5-5 GB MPS memory in float32.
-# For 8 layers (14.28M parameters), see m3-pro-14h.toml.
+# 10.74M-parameter preset (width 384 x 6 layers).
+# With mixed_precision and compile on an M3 Pro, measured ~45k bytes/s (~4.1 GB MPS memory):
+# ~69k steps in 7h (~1.14B bytes, ~107 bytes/param).
+# For larger models, see configs/14m.toml and configs/19m.toml.
 
 [model]
 context_length = 512      # ~90-100 English words per window

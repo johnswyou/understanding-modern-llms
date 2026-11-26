@@ -1,0 +1,55 @@
+# 14-hour FineWeb-Edu pretraining preset for Apple M3 Pro (18-core GPU, 36 GB RAM).
+# 19.03M parameters (Vaswani base width/depth: 512 x 6).
+# Measured ~29.2k bytes/s (~3.87 TFLOP/s, ~5.2 GB MPS memory) with SDPA + bfloat16 + compile:
+# ~90k steps in 14h (~1.47B bytes, ~77 bytes/param).
+
+[model]
+context_length = 512      # ~90-100 English words per window
+width = 512               # 64 dims per head; higher MPS TFLOP/s than 384
+heads = 8
+ff_width = 2048           # 4 * width
+layers = 6
+embedding_dropout = 0.0   # Streamed FineWeb-Edu does not repeat in 14h
+residual_dropout = 0.0
+attention_dropout = 0.0
+attention_bias = false
+ff_bias = true
+activation = "gelu"
+pre_norm = true
+layer_norm_eps = 1e-6
+position_base = 10000.0
+scale_embeddings = true
+tie_embeddings = true
+init_scale = 0.5          # Keeps initial logit scale near 1 with pre_norm (no final LayerNorm)
+
+[optimizer]
+beta1 = 0.9
+beta2 = 0.95
+epsilon = 1e-8
+weight_decay = 0.0        # torch.optim.Adam uses coupled L2, not AdamW
+warmup_steps = 3000       # ~3.3% of ~90k steps in 14h
+lr_multiplier = 0.9       # Peak LR = 7.3e-4 at step 3,000; ~1.3e-4 at step 90,000
+
+[training]
+hours = 14.0
+batch_size = 32           # 16,384 bytes/step
+label_smoothing = 0.0     # Avoids putting probability mass on invalid/control UTF-8 bytes
+seed = 0
+verbose = true
+log_interval_seconds = 30.0
+mixed_precision = true    # bfloat16 autocast on MPS
+compile = true            # First step compiles (~5 s)
+
+[data]
+subset = "sample-10BT"
+revision = "main"
+workers = 2
+
+[runtime]
+device = "auto"
+checkpoint = "checkpoints/fineweb-v0-19m.pt"
+
+[generation]
+max_new_tokens = 400
+temperature = 0.8
+# seed = 123              # Uncomment for reproducible sampling on the same device
