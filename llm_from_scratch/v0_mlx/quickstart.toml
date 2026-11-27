@@ -1,0 +1,7 @@
+# A short first run. Both train and generate use the checkpoint named here.
+[training]
+hours = 0.001  # 3.6 seconds after the first batch arrives
+verbose = true
+
+[runtime]
+checkpoint = "checkpoints/quickstart.safetensors"

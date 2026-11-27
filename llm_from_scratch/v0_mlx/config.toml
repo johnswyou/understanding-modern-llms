@@ -1,0 +1,50 @@
+# Copy this file to start an experiment. Omitted fields use the v0 defaults.
+[model]
+context_length = 64       # UTF-8 bytes or document-boundary tokens per window
+width = 64                # Must divide evenly among the attention heads
+heads = 4
+ff_width = 256            # Hidden units in each feed-forward layer
+layers = 2
+embedding_dropout = 0.1   # After adding sinusoidal positions
+residual_dropout = 0.1    # Before each residual addition
+attention_dropout = 0.0   # Applied to attention weights after softmax
+attention_bias = false    # Applies to query, key, value, and output projections
+ff_bias = true
+activation = "relu"       # relu or gelu
+pre_norm = false          # true applies LayerNorm before each sublayer
+layer_norm_eps = 1e-6
+position_base = 10000.0   # Base of the sinusoidal position frequencies
+scale_embeddings = true   # Multiply input embeddings by sqrt(width)
+tie_embeddings = true     # Use the input embedding matrix for output logits
+init_scale = 1.0          # Weight initialization std = init_scale / sqrt(fan_in)
+
+[optimizer]
+beta1 = 0.9               # Adam first-moment decay
+beta2 = 0.98              # Adam second-moment decay
+epsilon = 1e-9
+weight_decay = 0.0        # Adam L2 penalty
+warmup_steps = 200        # Linear warmup followed by inverse-square-root decay
+lr_multiplier = 1.0       # Peak learning rate = lr_multiplier / sqrt(width * warmup_steps)
+
+[training]
+hours = 0.25              # 15 minutes from the first ready batch
+batch_size = 32           # Context windows per optimizer update
+label_smoothing = 0.1
+seed = 0
+verbose = false
+log_interval_seconds = 5.0
+mixed_precision = false   # true runs the forward and backward passes in bfloat16 on the GPU; ignored on CPU
+compile = false           # true runs mx.compile on the training step; the first step compiles
+
+[data]
+subset = "sample-10BT"    # HuggingFaceFW/fineweb-edu configuration
+revision = "main"         # Use a dataset commit hash for a fixed revision
+
+[runtime]
+device = "auto"           # auto, cpu, or gpu
+checkpoint = "fineweb-v0.safetensors"  # Relative to the working directory
+
+[generation]
+max_new_tokens = 300
+temperature = 1.0         # 0 selects the most likely token. Positive values sample.
+# seed = 123              # Uncomment for reproducible sampling on the same device

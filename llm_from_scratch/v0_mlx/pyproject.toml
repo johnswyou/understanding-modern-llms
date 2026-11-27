@@ -1,0 +1,13 @@
+[project]
+name = "fineweb-decoder-v0-mlx"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["datasets>=4.2", "mlx>=0.32", "pydantic>=2.10,<3"]
+
+[dependency-groups]
+# test_parity.py compares this port against ../v0, which needs PyTorch.
+dev = ["torch>=2.5"]
+
+[tool.uv]
+# The script supports only Apple silicon (Metal GPU or CPU).
+environments = ["sys_platform == 'darwin' and platform_machine == 'arm64'"]
